@@ -1,0 +1,13 @@
+{
+  "name": "Termin Kalender",
+  "short_name": "Kalender",
+  "description": "Vollständiger Termin-Kalender",
+  "theme_color": "#2563eb",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

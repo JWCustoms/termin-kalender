@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.env
+*.db
+apps/api/data/
+.DS_Store
+ios/App/Pods/
+ios/App/build/
+apps/web/ios/
+*.ipa
+.vscode/
+.idea/
