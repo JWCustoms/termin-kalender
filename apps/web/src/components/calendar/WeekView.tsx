@@ -8,6 +8,7 @@ import {
   formatTime, WEEKDAY_LABELS, differenceInMinutes, setHours, setMinutes,
 } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
+import { getVisibleCalendarIds } from '@/lib/calendars';
 import { hapticLight } from '@/lib/haptics';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -32,7 +33,8 @@ export function WeekView({ onEventClick, onSlotClick }: WeekViewProps) {
   useEffect(() => {
     const ids = visibleCalendarIds.length
       ? visibleCalendarIds
-      : calendars?.filter((c) => c.isVisible).map((c) => c.id);
+      : getVisibleCalendarIds(calendars);
+    if (!ids) return;
     getEventsForRange(user.id, weekStart, weekEnd, ids).then(setEvents);
   }, [user.id, weekStart.getTime(), weekEnd.getTime(), visibleCalendarIds, calendars]);
 

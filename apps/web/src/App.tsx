@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore, useSettingsStore, useCalendarStore, applyTheme } from '@/stores';
 import { LoginPage } from '@/pages/LoginPage';
@@ -10,8 +10,26 @@ import { initUserData } from '@/db/repository';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
-  if (!user) return <Navigate to="/login" replace />;
+  const hydrated = useAuthHydrated();
+  if (!hydrated) {
+    return (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        Laden...
+      </div>
+    );
+  }
+  if (!user?.id) return <Navigate to="/login" replace />;
   return <>{children}</>;
+}
+
+function useAuthHydrated() {
+  const [hydrated, setHydrated] = useState(useAuthStore.persist.hasHydrated());
+  useEffect(() => {
+    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true));
+    setHydrated(useAuthStore.persist.hasHydrated());
+    return unsub;
+  }, []);
+  return hydrated;
 }
 
 function AppInit() {
@@ -25,10 +43,10 @@ function AppInit() {
   }, [theme]);
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       initUserData(user.id);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     const handler = (e: Event) => {

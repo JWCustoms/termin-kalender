@@ -5,6 +5,7 @@ import { getDb, type CalendarEvent } from '@/db/schema';
 import { getEventsForRange } from '@/db/repository';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameDay, isToday, formatDate, WEEKDAY_LABELS } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
+import { getVisibleCalendarIds } from '@/lib/calendars';
 import { hapticLight } from '@/lib/haptics';
 
 interface MonthViewProps {
@@ -35,7 +36,8 @@ export function MonthView({ onDayClick, onEventClick }: MonthViewProps) {
   useEffect(() => {
     const ids = visibleCalendarIds.length
       ? visibleCalendarIds
-      : calendars?.filter((c) => c.isVisible).map((c) => c.id);
+      : getVisibleCalendarIds(calendars);
+    if (!ids) return;
     getEventsForRange(user.id, calStart, calEnd, ids).then(setEvents);
   }, [user.id, calStart.getTime(), calEnd.getTime(), visibleCalendarIds, calendars]);
 

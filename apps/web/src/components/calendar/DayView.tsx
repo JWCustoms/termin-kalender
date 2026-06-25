@@ -6,6 +6,7 @@ import { getDb, type CalendarEvent } from '@/db/schema';
 import { getEventsForDay } from '@/db/repository';
 import { formatDateLong, formatTime, isToday } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
+import { getVisibleCalendarIds } from '@/lib/calendars';
 import { hapticLight } from '@/lib/haptics';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -26,7 +27,8 @@ export function DayView({ onEventClick, onSlotClick }: DayViewProps) {
   useEffect(() => {
     const ids = visibleCalendarIds.length
       ? visibleCalendarIds
-      : calendars?.filter((c) => c.isVisible).map((c) => c.id);
+      : getVisibleCalendarIds(calendars);
+    if (!ids) return;
     getEventsForDay(user.id, currentDate, ids).then(setEvents);
   }, [user.id, currentDate.getTime(), visibleCalendarIds, calendars]);
 

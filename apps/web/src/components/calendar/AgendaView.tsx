@@ -6,6 +6,7 @@ import { getDb, type CalendarEvent } from '@/db/schema';
 import { getEventsForRange } from '@/db/repository';
 import { startOfMonth, endOfMonth, formatDateShort, formatTime, isToday, parseISO } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
+import { getVisibleCalendarIds } from '@/lib/calendars';
 import { hapticLight } from '@/lib/haptics';
 
 interface AgendaViewProps {
@@ -27,7 +28,8 @@ export function AgendaView({ onEventClick }: AgendaViewProps) {
   async function loadEvents() {
     const ids = visibleCalendarIds.length
       ? visibleCalendarIds
-      : calendars?.filter((c) => c.isVisible).map((c) => c.id);
+      : getVisibleCalendarIds(calendars);
+    if (!ids) return;
     const data = await getEventsForRange(user.id, rangeStart, rangeEnd, ids);
     setEvents(data);
   }
