@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { useAuthStore, useSettingsStore, applyTheme } from '@/stores';
+import { useCurrentUser, useUserId } from '@/hooks/useCurrentUser';
 import { getDb, type Calendar as CalendarType } from '@/db/schema';
 import { updateSettings, getSettings, clearUserEvents } from '@/db/repository';
 import { updateProfile, changePassword, deleteAccount } from '@/lib/api';
@@ -20,21 +21,33 @@ import { createEvent } from '@/db/repository';
 import { hapticSuccess } from '@/lib/haptics';
 
 export function SettingsPage() {
-  const user = useAuthStore((s) => s.user)!;
+  const user = useCurrentUser();
+  const userId = useUserId();
   const logout = useAuthStore((s) => s.logout);
   const setUser = useAuthStore((s) => s.setUser);
   const { theme, setTheme } = useSettingsStore();
   const navigate = useNavigate();
 
-  const calendars = useLiveQuery(() => getDb(user.id).calendars.where('userId').equals(user.id).toArray(), [user.id]);
-  const settings = useLiveQuery(() => getDb(user.id).settings.where('userId').equals(user.id).first(), [user.id]);
+  const calendars = useLiveQuery(
+    () => (userId ? getDb(userId).calendars.where('userId').equals(userId).toArray() : []),
+    [userId]
+  );
+  const settings = useLiveQuery(
+    () => (userId ? getDb(userId).settings.where('userId').equals(userId).first() : undefined),
+    [userId]
+  );
 
-  const [name, setName] = useState(user.name);
+  const [name, setName] = useState(user?.name ?? '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  if (!user || !userId) {
+    return <div className="flex h-full items-center justify-center text-muted-foreground">Laden...</div>;
+  }
+  const uid = userId;
 
   async function handleUpdateProfile() {
     try {
@@ -60,7 +73,7 @@ export function SettingsPage() {
   }
 
   async function handleExportICS() {
-    const events = await getDb(user.id).events.where('userId').equals(user.id).toArray();
+    const events = await getDb(uid).events.where('userId').equals(uid).toArray();
     const ics = exportEventsToICS(events);
     downloadFile(ics, 'termin-kalender.ics', 'text/calendar');
     hapticSuccess();
@@ -81,7 +94,7 @@ export function SettingsPage() {
       for (const ev of imported) {
         await createEvent({
           id: uuidv4(),
-          userId: user.id,
+          userId: uid,
           calendarId: defaultCal.id,
           title: ev.title,
           description: ev.description || '',
@@ -104,10 +117,10 @@ export function SettingsPage() {
   }
 
   async function handleExportJSON() {
-    const events = await getDb(user.id).events.where('userId').equals(user.id).toArray();
-    const cats = await getDb(user.id).categories.where('userId').equals(user.id).toArray();
-    const cals = await getDb(user.id).calendars.where('userId').equals(user.id).toArray();
-    const s = await getSettings(user.id);
+    const events = await getDb(uid).events.where('userId').equals(uid).toArray();
+    const cats = await getDb(uid).categories.where('userId').equals(uid).toArray();
+    const cals = await getDb(uid).calendars.where('userId').equals(uid).toArray();
+    const s = await getSettings(uid);
     const json = exportBackupJSON({ events, calendars: cals, categories: cats, settings: (s || {}) as Record<string, unknown> });
     downloadFile(json, 'termin-kalender-backup.json', 'application/json');
     hapticSuccess();
@@ -121,10 +134,10 @@ export function SettingsPage() {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       const data = importBackupJSON(await file.text());
-      const db = getDb(user.id);
-      await db.events.bulkPut(data.events.map((ev) => ({ ...ev, userId: user.id })));
-      await db.calendars.bulkPut(data.calendars.map((c) => ({ ...c, userId: user.id })));
-      await db.categories.bulkPut(data.categories.map((c) => ({ ...c, userId: user.id })));
+      const db = getDb(uid);
+      await db.events.bulkPut(data.events.map((ev) => ({ ...ev, userId: uid })));
+      await db.calendars.bulkPut(data.calendars.map((c) => ({ ...c, userId: uid })));
+      await db.categories.bulkPut(data.categories.map((c) => ({ ...c, userId: uid })));
       setMessage('Backup wiederhergestellt');
       hapticSuccess();
     };
@@ -132,13 +145,13 @@ export function SettingsPage() {
   }
 
   async function handleToggleHolidays(enabled: boolean) {
-    await updateSettings(user.id, { holidaysEnabled: enabled });
+    await updateSettings(uid, { holidaysEnabled: enabled });
     if (enabled && settings) {
       let holidayCal = calendars?.find((c) => c.isHolidayCalendar);
       if (!holidayCal) {
         holidayCal = {
           id: uuidv4(),
-          userId: user.id,
+          userId: uid,
           name: 'Feiertage',
           color: '#f59e0b',
           isDefault: false,
@@ -146,11 +159,11 @@ export function SettingsPage() {
           isHolidayCalendar: true,
           createdAt: new Date().toISOString(),
         };
-        await getDb(user.id).calendars.add(holidayCal);
+        await getDb(uid).calendars.add(holidayCal);
       }
       const year = settings.holidaysYear || new Date().getFullYear();
-      const events = generateHolidayEvents(user.id, holidayCal.id, year, settings.bundesland as Bundesland);
-      await getDb(user.id).events.bulkPut(events);
+      const events = generateHolidayEvents(uid, holidayCal.id, year, settings.bundesland as Bundesland);
+      await getDb(uid).events.bulkPut(events);
       setMessage(`Feiertage ${year} geladen`);
     }
   }
@@ -158,7 +171,7 @@ export function SettingsPage() {
   async function handleDeleteAccount() {
     try {
       await deleteAccount(deletePassword);
-      await clearUserEvents(user.id);
+      await clearUserEvents(uid);
       logout();
       navigate('/login');
     } catch (err) {
@@ -199,7 +212,7 @@ export function SettingsPage() {
             ]).map(({ value, icon: Icon, label }) => (
               <button
                 key={value}
-                onClick={() => { setTheme(value); updateSettings(user.id, { theme: value }); applyTheme(value); }}
+                onClick={() => { setTheme(value); updateSettings(uid, { theme: value }); applyTheme(value); }}
                 className={`flex-1 flex flex-col items-center gap-1 rounded-lg border p-3 text-sm ${
                   theme === value ? 'border-primary bg-primary/5' : 'border-border'
                 }`}
@@ -242,7 +255,7 @@ export function SettingsPage() {
           <Select
             value={settings?.bundesland || 'ALL'}
             onChange={async (e) => {
-              await updateSettings(user.id, { bundesland: e.target.value });
+              await updateSettings(uid, { bundesland: e.target.value });
             }}
           >
             {BUNDESLAND_OPTIONS.map((opt) => (
@@ -261,7 +274,7 @@ export function SettingsPage() {
                 type="checkbox"
                 checked={cal.isVisible}
                 onChange={async (e) => {
-                  await getDb(user.id).calendars.update(cal.id, { isVisible: e.target.checked });
+                  await getDb(uid).calendars.update(cal.id, { isVisible: e.target.checked });
                 }}
                 className="h-4 w-4"
               />

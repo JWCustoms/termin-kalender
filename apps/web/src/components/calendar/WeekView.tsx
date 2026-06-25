@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { useAuthStore, useCalendarStore } from '@/stores';
-import { getDb, type CalendarEvent } from '@/db/schema';
+import { useCalendarStore } from '@/stores';
+import { type CalendarEvent } from '@/db/schema';
 import { getEventsForRange } from '@/db/repository';
 import {
   startOfWeek, endOfWeek, addDays, isSameDay, isToday,
@@ -10,6 +9,7 @@ import {
 import { cn } from '@/lib/utils';
 import { getVisibleCalendarIds } from '@/lib/calendars';
 import { hapticLight } from '@/lib/haptics';
+import { useUserCalendars } from '@/hooks/useUserCalendars';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -19,11 +19,9 @@ interface WeekViewProps {
 }
 
 export function WeekView({ onEventClick, onSlotClick }: WeekViewProps) {
-  const user = useAuthStore((s) => s.user)!;
+  const { user, userId, calendars } = useUserCalendars();
   const currentDate = useCalendarStore((s) => s.currentDate);
   const visibleCalendarIds = useCalendarStore((s) => s.visibleCalendarIds);
-
-  const calendars = useLiveQuery(() => getDb(user.id).calendars.where('userId').equals(user.id).toArray(), [user.id]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
@@ -34,11 +32,15 @@ export function WeekView({ onEventClick, onSlotClick }: WeekViewProps) {
     const ids = visibleCalendarIds.length
       ? visibleCalendarIds
       : getVisibleCalendarIds(calendars);
-    if (!ids) return;
-    getEventsForRange(user.id, weekStart, weekEnd, ids).then(setEvents);
-  }, [user.id, weekStart.getTime(), weekEnd.getTime(), visibleCalendarIds, calendars]);
+    if (!userId || !ids) return;
+    getEventsForRange(userId, weekStart, weekEnd, ids).then(setEvents);
+  }, [userId, weekStart.getTime(), weekEnd.getTime(), visibleCalendarIds, calendars]);
 
-  const calendarMap = new Map(calendars?.map((c) => [c.id, c]) || []);
+  if (!user) {
+    return <div className="flex flex-1 items-center justify-center text-muted-foreground">Laden...</div>;
+  }
+
+  const calendarMap = new Map((calendars ?? []).map((c) => [c.id, c]));
 
   function getTimedEvents(day: Date) {
     return events.filter((e) => !e.allDay && isSameDay(new Date(e.startDate), day));

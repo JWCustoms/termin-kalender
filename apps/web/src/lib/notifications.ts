@@ -21,14 +21,14 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 export async function scheduleEventReminders(event: CalendarEvent): Promise<void> {
-  if (!event.reminders.length) return;
+  if (!event.reminders?.length) return;
 
   const granted = permissionGranted || (await requestNotificationPermission());
   if (!granted) return;
 
   await cancelEventReminders(event.id);
 
-  const notifications = event.reminders.map((reminder, index) => {
+  const notifications = (event.reminders ?? []).map((reminder, index) => {
     const eventTime = parseISO(event.startDate);
     const notifyAt = new Date(eventTime.getTime() - reminder.minutesBefore * 60000);
     if (notifyAt <= new Date()) return null;

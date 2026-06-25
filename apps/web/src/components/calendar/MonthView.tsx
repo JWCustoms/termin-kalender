@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { useAuthStore, useCalendarStore } from '@/stores';
-import { getDb, type CalendarEvent } from '@/db/schema';
+import { useCalendarStore } from '@/stores';
+import { type CalendarEvent } from '@/db/schema';
 import { getEventsForRange } from '@/db/repository';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameDay, isToday, formatDate, WEEKDAY_LABELS } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import { getVisibleCalendarIds } from '@/lib/calendars';
 import { hapticLight } from '@/lib/haptics';
+import { useUserCalendars } from '@/hooks/useUserCalendars';
 
 interface MonthViewProps {
   onDayClick: (date: Date) => void;
@@ -14,11 +14,9 @@ interface MonthViewProps {
 }
 
 export function MonthView({ onDayClick, onEventClick }: MonthViewProps) {
-  const user = useAuthStore((s) => s.user)!;
+  const { user, userId, calendars } = useUserCalendars();
   const currentDate = useCalendarStore((s) => s.currentDate);
   const visibleCalendarIds = useCalendarStore((s) => s.visibleCalendarIds);
-
-  const calendars = useLiveQuery(() => getDb(user.id).calendars.where('userId').equals(user.id).toArray(), [user.id]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
 
   const monthStart = startOfMonth(currentDate);
@@ -34,17 +32,19 @@ export function MonthView({ onDayClick, onEventClick }: MonthViewProps) {
   }
 
   useEffect(() => {
-    const ids = visibleCalendarIds.length
-      ? visibleCalendarIds
-      : getVisibleCalendarIds(calendars);
-    if (!ids) return;
-    getEventsForRange(user.id, calStart, calEnd, ids).then(setEvents);
-  }, [user.id, calStart.getTime(), calEnd.getTime(), visibleCalendarIds, calendars]);
+    const ids = visibleCalendarIds.length ? visibleCalendarIds : getVisibleCalendarIds(calendars);
+    if (!userId || !ids) return;
+    getEventsForRange(userId, calStart, calEnd, ids).then(setEvents);
+  }, [userId, calStart.getTime(), calEnd.getTime(), visibleCalendarIds, calendars]);
 
-  const calendarMap = new Map(calendars?.map((c) => [c.id, c]) || []);
+  if (!user) {
+    return <div className="flex flex-1 items-center justify-center text-muted-foreground">Laden...</div>;
+  }
+
+  const calendarMap = new Map((calendars ?? []).map((c) => [c.id, c]));
 
   function getEventsForDay(day: Date) {
-    return events.filter((e) => isSameDay(new Date(e.startDate), day));
+    return events.filter((e) => e?.id && isSameDay(new Date(e.startDate), day));
   }
 
   return (

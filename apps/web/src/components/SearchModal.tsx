@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
-import { useAuthStore } from '@/stores';
+import { useCalendarStore } from '@/stores';
+import { useUserId } from '@/hooks/useCurrentUser';
 import { searchEvents } from '@/db/repository';
 import { formatDateShort, formatTime } from '@/lib/date-utils';
 import type { CalendarEvent } from '@/db/schema';
-import { useCalendarStore } from '@/stores';
 
 interface SearchModalProps {
   open: boolean;
@@ -14,18 +14,18 @@ interface SearchModalProps {
 }
 
 export function SearchModal({ open, onClose }: SearchModalProps) {
-  const user = useAuthStore((s) => s.user)!;
+  const userId = useUserId();
   const openEventModal = useCalendarStore((s) => s.openEventModal);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CalendarEvent[]>([]);
 
   async function handleSearch(q: string) {
     setQuery(q);
-    if (q.length < 2) {
+    if (!userId || q.length < 2) {
       setResults([]);
       return;
     }
-    const events = await searchEvents(user.id, q);
+    const events = await searchEvents(userId, q);
     setResults(events);
   }
 
@@ -35,6 +35,8 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     setQuery('');
     setResults([]);
   }
+
+  if (!open) return null;
 
   return (
     <Modal open={open} onClose={onClose} title="Termine suchen">

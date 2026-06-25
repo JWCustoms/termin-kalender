@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { MapPin } from 'lucide-react';
-import { useAuthStore, useCalendarStore } from '@/stores';
-import { getDb, type CalendarEvent } from '@/db/schema';
+import { useCalendarStore } from '@/stores';
+import { type CalendarEvent } from '@/db/schema';
 import { getEventsForDay } from '@/db/repository';
 import { formatDateLong, formatTime, isToday } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import { getVisibleCalendarIds } from '@/lib/calendars';
 import { hapticLight } from '@/lib/haptics';
+import { useUserCalendars } from '@/hooks/useUserCalendars';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -17,22 +17,22 @@ interface DayViewProps {
 }
 
 export function DayView({ onEventClick, onSlotClick }: DayViewProps) {
-  const user = useAuthStore((s) => s.user)!;
+  const { user, userId, calendars } = useUserCalendars();
   const currentDate = useCalendarStore((s) => s.currentDate);
   const visibleCalendarIds = useCalendarStore((s) => s.visibleCalendarIds);
-
-  const calendars = useLiveQuery(() => getDb(user.id).calendars.where('userId').equals(user.id).toArray(), [user.id]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
 
   useEffect(() => {
-    const ids = visibleCalendarIds.length
-      ? visibleCalendarIds
-      : getVisibleCalendarIds(calendars);
-    if (!ids) return;
-    getEventsForDay(user.id, currentDate, ids).then(setEvents);
-  }, [user.id, currentDate.getTime(), visibleCalendarIds, calendars]);
+    const ids = visibleCalendarIds.length ? visibleCalendarIds : getVisibleCalendarIds(calendars);
+    if (!userId || !ids) return;
+    getEventsForDay(userId, currentDate, ids).then(setEvents);
+  }, [userId, currentDate.getTime(), visibleCalendarIds, calendars]);
 
-  const calendarMap = new Map(calendars?.map((c) => [c.id, c]) || []);
+  if (!user) {
+    return <div className="flex flex-1 items-center justify-center text-muted-foreground">Laden...</div>;
+  }
+
+  const calendarMap = new Map((calendars ?? []).map((c) => [c.id, c]));
   const allDayEvents = events.filter((e) => e.allDay);
   const timedEvents = events.filter((e) => !e.allDay);
 

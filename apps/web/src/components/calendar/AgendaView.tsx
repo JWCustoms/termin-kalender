@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { MapPin, Clock } from 'lucide-react';
-import { useAuthStore, useCalendarStore } from '@/stores';
-import { getDb, type CalendarEvent } from '@/db/schema';
+import { useCalendarStore } from '@/stores';
+import { type CalendarEvent } from '@/db/schema';
 import { getEventsForRange } from '@/db/repository';
 import { startOfMonth, endOfMonth, formatDateShort, formatTime, isToday, parseISO } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import { getVisibleCalendarIds } from '@/lib/calendars';
 import { hapticLight } from '@/lib/haptics';
+import { useUserCalendars } from '@/hooks/useUserCalendars';
 
 interface AgendaViewProps {
   onEventClick: (eventId: string) => void;
 }
 
 export function AgendaView({ onEventClick }: AgendaViewProps) {
-  const user = useAuthStore((s) => s.user)!;
+  const { user, userId, calendars } = useUserCalendars();
   const currentDate = useCalendarStore((s) => s.currentDate);
   const visibleCalendarIds = useCalendarStore((s) => s.visibleCalendarIds);
-
-  const calendars = useLiveQuery(() => getDb(user.id).calendars.where('userId').equals(user.id).toArray(), [user.id]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -26,17 +24,19 @@ export function AgendaView({ onEventClick }: AgendaViewProps) {
   const rangeEnd = endOfMonth(currentDate);
 
   async function loadEvents() {
-    const ids = visibleCalendarIds.length
-      ? visibleCalendarIds
-      : getVisibleCalendarIds(calendars);
-    if (!ids) return;
-    const data = await getEventsForRange(user.id, rangeStart, rangeEnd, ids);
+    const ids = visibleCalendarIds.length ? visibleCalendarIds : getVisibleCalendarIds(calendars);
+    if (!userId || !ids) return;
+    const data = await getEventsForRange(userId, rangeStart, rangeEnd, ids);
     setEvents(data);
   }
 
-  useEffect(() => { loadEvents(); }, [user.id, rangeStart.getTime(), rangeEnd.getTime(), visibleCalendarIds, calendars]);
+  useEffect(() => { loadEvents(); }, [userId, rangeStart.getTime(), rangeEnd.getTime(), visibleCalendarIds, calendars]);
 
-  const calendarMap = new Map(calendars?.map((c) => [c.id, c]) || []);
+  if (!user) {
+    return <div className="flex flex-1 items-center justify-center text-muted-foreground">Laden...</div>;
+  }
+
+  const calendarMap = new Map((calendars ?? []).map((c) => [c.id, c]));
 
   const grouped = events.reduce<Record<string, CalendarEvent[]>>((acc, event) => {
     const key = event.startDate.slice(0, 10);

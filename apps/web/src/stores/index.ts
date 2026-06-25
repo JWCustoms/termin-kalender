@@ -20,6 +20,9 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isLoading: false,
       setAuth: async (user, token) => {
+        if (!user?.id) {
+          throw new Error('Ungültige Benutzerdaten');
+        }
         localStorage.setItem('token', token);
         await initUserData(user.id);
         set({ user, token });

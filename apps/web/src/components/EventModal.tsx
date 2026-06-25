@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Select } from '@/components/ui/Select';
 import { Label } from '@/components/ui/Label';
-import { useAuthStore, useCalendarStore } from '@/stores';
+import { useUserId } from '@/hooks/useCurrentUser';
+import { useCalendarStore } from '@/stores';
 import { getDb, REMINDER_OPTIONS, type CalendarEvent } from '@/db/schema';
 import { createEvent, updateEvent, deleteEvent, duplicateEvent } from '@/db/repository';
 import { v4 as uuidv4 } from '@/db/uuid';
@@ -17,12 +18,21 @@ import { scheduleEventReminders, cancelEventReminders } from '@/lib/notification
 import { hapticSuccess, hapticMedium } from '@/lib/haptics';
 
 export function EventModal() {
-  const user = useAuthStore((s) => s.user)!;
+  const userId = useUserId();
   const { isEventModalOpen, eventModalDate, selectedEventId, closeEventModal } = useCalendarStore();
 
-  const calendars = useLiveQuery(() => getDb(user.id).calendars.where('userId').equals(user.id).toArray(), [user.id]);
-  const categories = useLiveQuery(() => getDb(user.id).categories.where('userId').equals(user.id).toArray(), [user.id]);
-  const settings = useLiveQuery(() => getDb(user.id).settings.where('userId').equals(user.id).first(), [user.id]);
+  const calendars = useLiveQuery(
+    () => (userId ? getDb(userId).calendars.where('userId').equals(userId).toArray() : []),
+    [userId]
+  );
+  const categories = useLiveQuery(
+    () => (userId ? getDb(userId).categories.where('userId').equals(userId).toArray() : []),
+    [userId]
+  );
+  const settings = useLiveQuery(
+    () => (userId ? getDb(userId).settings.where('userId').equals(userId).first() : undefined),
+    [userId]
+  );
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -45,24 +55,24 @@ export function EventModal() {
   const baseEventId = selectedEventId?.includes('_') ? selectedEventId.split('_')[0] : selectedEventId;
 
   useEffect(() => {
-    if (!isEventModalOpen) return;
+    if (!isEventModalOpen || !userId) return;
 
     if (baseEventId) {
-      getDb(user.id).events.get(baseEventId).then((event) => {
+      getDb(userId).events.get(baseEventId).then((event) => {
         if (!event) return;
         setTitle(event.title);
-        setDescription(event.description);
-        setLocation(event.location);
-        setUrl(event.url);
-        setNotes(event.notes);
+        setDescription(event.description || '');
+        setLocation(event.location || '');
+        setUrl(event.url || '');
+        setNotes(event.notes || '');
         setStartDate(getDatePart(event.startDate));
         setStartTime(getTimePart(event.startDate));
         setEndDate(getDatePart(event.endDate));
         setEndTime(getTimePart(event.endDate));
         setAllDay(event.allDay);
         setCalendarId(event.calendarId);
-        setCategoryIds(event.categoryIds);
-        setReminders(event.reminders.length ? event.reminders : [{ minutesBefore: 15 }]);
+        setCategoryIds(event.categoryIds || []);
+        setReminders(event.reminders?.length ? event.reminders : [{ minutesBefore: 15 }]);
         setRecurrence(event.rrule ? 'weekly' : 'none');
       });
     } else if (eventModalDate) {
@@ -85,7 +95,10 @@ export function EventModal() {
       setRecurrence('none');
       setReminders([{ minutesBefore: settings?.defaultReminderMinutes || 15 }]);
     }
-  }, [isEventModalOpen, baseEventId, eventModalDate, calendars, settings]);
+  }, [isEventModalOpen, baseEventId, eventModalDate, calendars, settings, userId]);
+
+  if (!isEventModalOpen || !userId) return null;
+  const uid = userId;
 
   async function handleSave() {
     if (!title.trim()) return;
@@ -102,7 +115,7 @@ export function EventModal() {
 
     const eventData: Omit<CalendarEvent, 'createdAt' | 'updatedAt'> = {
       id: baseEventId || uuidv4(),
-      userId: user.id,
+      userId: uid,
       calendarId: calendarId || calendars?.[0]?.id || '',
       title: title.trim(),
       description,
@@ -121,7 +134,7 @@ export function EventModal() {
     try {
       let saved: CalendarEvent;
       if (isEditing && baseEventId) {
-        await updateEvent(baseEventId, user.id, eventData);
+        await updateEvent(baseEventId, uid, eventData);
         saved = { ...eventData, createdAt: '', updatedAt: '' } as CalendarEvent;
         await cancelEventReminders(baseEventId);
       } else {
@@ -143,13 +156,13 @@ export function EventModal() {
     }
     hapticMedium();
     await cancelEventReminders(baseEventId);
-    await deleteEvent(baseEventId, user.id);
+    await deleteEvent(baseEventId, uid);
     closeEventModal();
   }
 
   async function handleDuplicate() {
     if (!baseEventId) return;
-    const event = await getDb(user.id).events.get(baseEventId);
+    const event = await getDb(uid).events.get(baseEventId);
     if (event) {
       const copy = await duplicateEvent(event);
       await scheduleEventReminders(copy);
@@ -275,7 +288,7 @@ export function EventModal() {
           <div className="space-y-2">
             <Label>Kategorien</Label>
             <div className="flex flex-wrap gap-2">
-              {categories.map((cat) => (
+              {categories.filter(Boolean).map((cat) => (
                 <button
                   key={cat.id}
                   type="button"

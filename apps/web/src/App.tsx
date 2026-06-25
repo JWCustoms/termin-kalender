@@ -43,6 +43,16 @@ function AppInit() {
   }, [theme]);
 
   useEffect(() => {
+    const clearBadAuth = () => {
+      const { user, logout } = useAuthStore.getState();
+      if (user && !user.id) logout();
+    };
+    const unsub = useAuthStore.persist.onFinishHydration(clearBadAuth);
+    clearBadAuth();
+    return unsub;
+  }, []);
+
+  useEffect(() => {
     if (user?.id) {
       initUserData(user.id);
     }
